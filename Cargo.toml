@@ -1,0 +1,18 @@
+[package]
+name = "zagreus"
+version = "0.1.0"
+edition = "2021"
+description = "A featureful library for backoff handling"
+license = "MIT"
+categories = ["web-programming","network-programming",]
+keywords = ["backoff", "retry", "exponential", "exponential backoff"]
+
+[dependencies]
+
+
+[features]
+#This feature is highly risky for library crates.
+#this feature enables an auto-trait which can makes for extremely volatile semver hazards.
+#This requires nightly rust and very likely always will. Take care not to use this feature
+#in library crates.
+nightly_can_backoff = []

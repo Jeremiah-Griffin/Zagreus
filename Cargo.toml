@@ -5,7 +5,7 @@ edition = "2021"
 description = "A featureful library for backoff handling"
 license = "MIT"
 categories = ["web-programming","network-programming",]
-keywords = ["backoff", "retry", "exponential", "exponential backoff"]
+keywords = ["backoff", "retry", "exponential"]
 
 [dependencies]
 

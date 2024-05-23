@@ -11,7 +11,6 @@ There are three traits with which users of this crate must familiarize themselve
 `BackoffHandler`: Generates (and sleeps for) the amount of time produced by the BackoffStrategy as randomized by the Randomizer.
 
 # Usage:
-
 Start by creating a BackoffStrategy. This is very simple and involves only defining a `limit()` to the number of attempts iterations
 and an `interval()` method to calculate the time between said iterations.
 

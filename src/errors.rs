@@ -2,8 +2,39 @@ use std::{fmt::Display, num::NonZeroU32};
 
 #[derive(Debug)]
 pub struct BackoffError<E> {
-    pub error: E,
-    pub kind: BackoffErrorKind,
+    error: E,
+    kind: BackoffErrorKind,
+}
+
+impl<E> BackoffError<E> {
+    pub fn new(error: E, kind: BackoffErrorKind) -> BackoffError<E> {
+        BackoffError { error, kind }
+    }
+
+    ///Get a reference to the contained Error value.
+    pub fn error(&self) -> &E {
+        &self.error
+    }
+
+    ///Get a reference to the contained BackoffErrorKind.
+    pub fn kind(&self) -> &BackoffErrorKind {
+        &self.kind
+    }
+
+    ///Take the contained error and kind from this instance.
+    pub fn into_error_and_kind(self) -> (E, BackoffErrorKind) {
+        (self.error, self.kind)
+    }
+
+    ///Take the contained error from this instance.
+    pub fn into_error(self) -> E {
+        self.error
+    }
+
+    ///Take the contained kind from this instance.
+    pub fn into_kind(self) -> BackoffErrorKind {
+        self.kind
+    }
 }
 
 #[derive(Debug)]

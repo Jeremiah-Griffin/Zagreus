@@ -1,4 +1,4 @@
-use std::{future::Future, num::NonZeroU32, time::Duration};
+use std::{future::Future, time::Duration};
 
 use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, BackoffErrorKind};
 
@@ -20,8 +20,9 @@ pub trait BackoffHandler: Send {
     ///  in the former case `true` should be returned and in the latter, `false`.
     ///- peek_retry: Allows the BackoffHandler to decide whether to to terminate early based on fallible's Error value *or* the next retry interval planned by the Handler.
     ///  this can be useful i.e. when receiving an HTTP 429 (Retry Later), and overriding the planned_duration, or terminating early if planned_duration is too long.
-    ///  When this returns Some(_), the returned duration will be used as the interval between retries.
-    ///  When it returns None the Handler will terminate all retries immediately and return a BackoffError::EarlyTermination error.
+    ///  When this returns `Some(_)`, the returned duration will be used as the interval between retries.
+    ///  When it returns `None` the Handler will terminate all retries immediately and return a `BackoffError` with a `BackoffErrorKind:::EarlyTermination` as its `kind` value.
+    ///- Randomizer: implementor of `Randomizer` that will be used to add random error to interval spacing.
     ///- sleep: used to make the current thread/task/etc sleep for the duration calculated by the BackoffStrategy and peek_retry.
     ///
     ///# Generic Parameters
@@ -29,9 +30,13 @@ pub trait BackoffHandler: Send {
     ///- `E`: The error value of `fallible`.
     ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
-    ///Note: parameters T, E, Fal, Fut, and S, are very likely to be inferred by the compiler. However, R might not.
     async fn handle<T, E, F, S>(
         &self,
+        //Make sure that ONLY fallible is accepted as a closure:
+        //When nightly_auto_trait is implemented it limits the number of structural checks for the implementors of CanBackoff
+        //this means that if any of the other callbacks take a BackoffHandler a nested call could occur, but that is an unlikely
+        //usecase for any of those methods, while allowing paterns that dont lend themselves to auto trait implementation checking (like dyn trait) to be used
+        //in those callbacks, if necessary
         mut fallible: impl FnMut() -> F,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration) -> Option<Duration>,
@@ -45,7 +50,7 @@ pub trait BackoffHandler: Send {
     {
         let log_and_return = |e: BackoffError<E>| -> E {
             Self::log(&e);
-            e.error
+            e.into_error()
         };
 
         let limit = strategy.limit();
@@ -58,10 +63,10 @@ pub trait BackoffHandler: Send {
             };
 
             if is_recoverable(&error) == false {
-                return Err(log_and_return(BackoffError {
+                return Err(log_and_return(BackoffError::new(
                     error,
-                    kind: BackoffErrorKind::Unrecoverable(attempts),
-                }));
+                    BackoffErrorKind::Unrecoverable(attempts),
+                )));
             };
 
             let interval = randomizer.randomize(strategy.interval(attempts));
@@ -69,10 +74,10 @@ pub trait BackoffHandler: Send {
             match peek_retry(&error, interval) {
                 Some(i) => sleep(i).await,
                 None => {
-                    return Err(log_and_return(BackoffError {
+                    return Err(log_and_return(BackoffError::new(
                         error,
-                        kind: BackoffErrorKind::ExplicitlyTerminated(attempts),
-                    }));
+                        BackoffErrorKind::ExplicitlyTerminated(attempts),
+                    )));
                 }
             }
         }
@@ -81,14 +86,10 @@ pub trait BackoffHandler: Send {
         fallible()
             .await
             .map_err(|e| match is_recoverable(&e) {
-                true => BackoffError {
-                    error: e,
-                    kind: BackoffErrorKind::ExhaustedLimit(limit),
-                },
-                false => BackoffError {
-                    error: e,
-                    kind: BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit),
-                },
+                true => BackoffError::new(e, BackoffErrorKind::ExhaustedLimit(limit)),
+                false => {
+                    BackoffError::new(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit))
+                }
             })
             .map_err(|e| log_and_return(e))
     }

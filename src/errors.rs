@@ -48,8 +48,10 @@ pub enum BackoffErrorKind {
     ExhaustedLimit(NonZeroU32),
     ///The final call in a retry loop may return an unrecoverable error, in which case it is both Unrecoverable and ExhaustedLimit.
     UnrecoverableAndExhaustedLimit(NonZeroU32),
-    ///Some condition
-    ExplicitlyTerminated(u32),
+    ///A call to peek_retry returned None, meaning it requested further attempts to be cancelled.
+    PeekTerminated(u32),
+    ///A call to BackoffStrategy::interval returned None, meaning it requested further attempts to be cancelled.
+    IntervalTerminated(u32),
 }
 
 impl<E: std::error::Error> Display for BackoffError<E> {
@@ -69,12 +71,16 @@ impl<E: std::error::Error> Display for BackoffError<E> {
                 i.get(),
                 self.error
             ),
-            BackoffErrorKind::ExplicitlyTerminated(i) => {
+            BackoffErrorKind::PeekTerminated(i) => {
                 write!(
                     f,
-                    "After {i} attempt(s), retrying was explicitly terminated."
+                    "After {i} attempt(s), retrying was terminated by peek_retry"
                 )
             }
+            BackoffErrorKind::IntervalTerminated(i) => write!(
+                f,
+                "After {i} attempt(s), retrying was terminated by BackoffStrategy::interval()."
+            ),
         }
     }
 }

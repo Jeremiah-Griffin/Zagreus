@@ -1,10 +1,15 @@
 use std::{num::NonZeroU32, time::Duration};
 
 pub trait BackoffStrategy: Send {
-    fn interval(&self, attempts: u32) -> Duration;
+    ///The interval computed for the attempts + 1 backoff.
+    ///Returning Some(_) will progress the attempt loop once more with the contained Duration.
+    ///Returning None will case the loop to halt immediately. This can be useful for implementing timeouts.
+    fn interval(&self, attempts: u32) -> Option<Duration>;
 
+    ///The maximum number of retries that may be attempted by a handle using this Strategy.
     fn limit(&self) -> NonZeroU32;
 }
+
 ///Retry strategy with backoffs that grow with n * i where n is the interval, and i is the number of requests.
 pub struct Linear {
     ///The constant factor of the backoff. The first backoff interval will be this long.
@@ -20,8 +25,8 @@ impl Linear {
     }
 }
 impl BackoffStrategy for Linear {
-    fn interval(&self, attempts: u32) -> Duration {
-        self.constant.mul_f64(attempts as f64)
+    fn interval(&self, attempts: u32) -> Option<Duration> {
+        Some(self.constant.mul_f64(attempts as f64))
     }
 
     fn limit(&self) -> NonZeroU32 {
@@ -38,8 +43,8 @@ pub struct Constant {
 }
 
 impl BackoffStrategy for Constant {
-    fn interval(&self, _attempts: u32) -> Duration {
-        self.constant
+    fn interval(&self, _attempts: u32) -> Option<Duration> {
+        Some(self.constant)
     }
 
     fn limit(&self) -> NonZeroU32 {
@@ -75,8 +80,8 @@ impl Exponential {
 }
 
 impl BackoffStrategy for Exponential {
-    fn interval(&self, attempts: u32) -> Duration {
-        self.constant.mul_f64((self.factor.get() * attempts) as f64)
+    fn interval(&self, attempts: u32) -> Option<Duration> {
+        Some(self.constant.mul_f64((self.factor.get() * attempts) as f64))
     }
 
     fn limit(&self) -> NonZeroU32 {

@@ -47,12 +47,13 @@ pub trait BackoffHandler: Send {
         F: Future<Output = Result<T, E>>,
         S: Future<Output = ()>,
     {
-        let log_and_return = |e: BackoffError<E>| -> E {
-            Self::log(&e);
-            e.into_error()
-        };
-
         let limit = strategy.limit();
+
+        let log_and_return = |e: E, kind: BackoffErrorKind| -> E {
+            let backoff_error = BackoffError::new(e, kind);
+            Self::log(&backoff_error);
+            backoff_error.into_error()
+        };
         //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
         //we iterate to limit exclusive so that the final retry is the limit, nth retry.
         for attempt in 1..limit.get() {
@@ -61,35 +62,38 @@ pub trait BackoffHandler: Send {
                 return res;
             };
 
+            //if an error is not recoverable we terminate iteration
             if is_recoverable(&error) == false {
-                return Err(log_and_return(BackoffError::new(
+                return Err(log_and_return(
                     error,
                     BackoffErrorKind::Unrecoverable(attempt),
-                )));
+                ));
             };
 
-            let randomized = randomizer.randomize(strategy.interval(attempt));
+            //interval can terminate iteration
+            let Some(interval) = strategy.interval(attempt) else {
+                return Err(log_and_return(
+                    error,
+                    BackoffErrorKind::IntervalTerminated(attempt),
+                ));
+            };
 
-            match peek_retry(&error, randomized, attempt) {
+            //peek_retry can terminate iteration.
+            match peek_retry(&error, randomizer.randomize(interval), attempt) {
                 Some(i) => sleep(i).await,
                 None => {
-                    return Err(log_and_return(BackoffError::new(
+                    return Err(log_and_return(
                         error,
-                        BackoffErrorKind::ExplicitlyTerminated(attempt),
-                    )));
+                        BackoffErrorKind::PeekTerminated(attempt),
+                    ));
                 }
             }
         }
 
         //We don't bother to call peek_retry with this iteration as the prior iteration wil have already done so.
-        fallible()
-            .await
-            .map_err(|e| match is_recoverable(&e) {
-                true => BackoffError::new(e, BackoffErrorKind::ExhaustedLimit(limit)),
-                false => {
-                    BackoffError::new(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit))
-                }
-            })
-            .map_err(|e| log_and_return(e))
+        fallible().await.map_err(|e| match is_recoverable(&e) {
+            true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit)),
+            false => log_and_return(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit)),
+        })
     }
 }

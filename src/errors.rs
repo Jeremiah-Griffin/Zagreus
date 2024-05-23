@@ -17,15 +17,34 @@ pub enum BackoffErrorKind {
     ExhaustedLimit(NonZeroU32),
     ///The final call in a retry loop may return an unrecoverable error, in which case it is both Unrecoverable and ExhaustedLimit.
     UnrecoverableAndExhaustedLimit(NonZeroU32),
+    ///Some condition
+    ExplicitlyTerminated(u32),
 }
 
 impl<E: std::error::Error> Display for BackoffError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
-        BackoffErrorKind::Unrecoverable(i) => write!(f, "After {i} attempts Encountered unrecoverable error: {:?}", self.error),
-        BackoffErrorKind::ExhaustedLimit(i) => write!(f, "Limit of {} was exhausted. Error: {:?}", i.get(), self.error),
-        BackoffErrorKind::UnrecoverableAndExhaustedLimit(i ) => write!(f, "An unrecoverable error was encountered and the limit of {} was exhausted. Error: {:?}", i.get(), self.error),
-    }
+            BackoffErrorKind::Unrecoverable(i) => write!(
+                f,
+                "After {i} attempt(s) the following unrecoverable error was encountered: {}",
+                self.error
+            ),
+            BackoffErrorKind::ExhaustedLimit(i) => {
+                write!(f, "Limit of {} was exhausted. {}", i.get(), self.error)
+            }
+            BackoffErrorKind::UnrecoverableAndExhaustedLimit(i) => write!(
+                f,
+                "An unrecoverable error was encountered and the limit of {} was exhausted. {}",
+                i.get(),
+                self.error
+            ),
+            BackoffErrorKind::ExplicitlyTerminated(i) => {
+                write!(
+                    f,
+                    "After {i} attempt(s), retrying was explicitly terminated."
+                )
+            }
+        }
     }
 }
 impl<E: std::error::Error> std::error::Error for BackoffError<E> {}

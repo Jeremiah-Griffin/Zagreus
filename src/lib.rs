@@ -1,6 +1,5 @@
 pub use errors::{BackoffError, BackoffErrorKind};
-pub use handler::BackoffHandler;
-pub use strategy::BackoffStrategy;
+pub use handler::{BackoffHandler, BackoffStrategy, NotRandom, Randomizer};
 
 mod errors;
 mod handler;

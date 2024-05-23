@@ -11,11 +11,10 @@ pub trait BackoffStrategy {
 ///Provides the interface by which BackoffHandlers can add randmoness to their retries.
 ///Randomization is useful to prevent multiple requests to an endpoint which fail concurrently
 ///from retrying the endpoint concurrently, which may exacerbate the problem or even trigger DoS protections.
-///Many random number generators are stateful, so Randomizer is a trait which may be implemented on structs
-///which manage said state.
 pub trait Randomizer {
     ///Given an interval, applies a function to randomize
-    fn randomize(interval: Duration) -> Duration;
+    ///TODO: do some RNGs need a mutable reference to self?
+    fn randomize(&mut self, interval: Duration) -> Duration;
 }
 
 ///A Randomizer that doesn't actually do anything.
@@ -23,13 +22,12 @@ pub trait Randomizer {
 pub struct NotRandom {}
 
 impl Randomizer for NotRandom {
-    fn randomize(interval: Duration) -> Duration {
+    fn randomize(&mut self, interval: Duration) -> Duration {
         interval
     }
 }
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
-//TODO: should Strategy be a supertrait for handler or a generic parameter?
 #[allow(async_fn_in_trait)]
 pub trait BackoffHandler: BackoffStrategy + Send {
     ///Allows the implementor to "hook" into the retry loop and log the final retuned error automatically.
@@ -62,6 +60,7 @@ pub trait BackoffHandler: BackoffStrategy + Send {
         mut fallible: Fal,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration) -> Option<Duration>,
+        randomizer: &mut R,
         sleep: fn(to_sleep: Duration) -> S,
     ) -> Result<T, E>
     where
@@ -91,7 +90,7 @@ pub trait BackoffHandler: BackoffStrategy + Send {
                 }));
             };
 
-            let interval = R::randomize(self.interval(attempts));
+            let interval = randomizer.randomize(self.interval(attempts));
 
             match peek_retry(&error, interval) {
                 Some(i) => sleep(i).await,
@@ -120,3 +119,8 @@ pub trait BackoffHandler: BackoffStrategy + Send {
             .map_err(|e| log_and_return(e))
     }
 }
+
+///TODO: finish blanket impl. Shoudl log be refactored into seperate trait that is a supertrait of BackoffStrategy?
+///the trait bound of it in BackoffHandler means the blanket impl cannot be done while it is part of Log withot  a default impl which is easily ignored and any one that makes sense is going to be surprising.
+///TODO: SHould BackoffStrategy be folded into Handler?
+impl BackoffHandler for S {}

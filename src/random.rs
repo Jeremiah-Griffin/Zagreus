@@ -13,6 +13,7 @@ pub trait Randomizer {
 pub struct NotRandom {}
 
 impl Randomizer for NotRandom {
+    ///NotRandom always returns the interval it is given, doing nothing.
     fn randomize(&mut self, interval: Duration) -> Duration {
         interval
     }

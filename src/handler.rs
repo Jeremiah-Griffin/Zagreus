@@ -1,6 +1,5 @@
-use std::{future::Future, time::Duration};
-
 use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, BackoffErrorKind};
+use std::{future::Future, time::Duration};
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
 #[allow(async_fn_in_trait)]
@@ -39,7 +38,7 @@ pub trait BackoffHandler: Send {
         //in those callbacks, if necessary
         mut fallible: impl FnMut() -> F,
         is_recoverable: fn(error: &E) -> bool,
-        peek_retry: fn(error: &E, planned_interval: Duration) -> Option<Duration>,
+        peek_retry: fn(error: &E, planned_interval: Duration, attempt: u32) -> Option<Duration>,
         randomizer: &mut impl Randomizer,
         strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
@@ -56,7 +55,7 @@ pub trait BackoffHandler: Send {
         let limit = strategy.limit();
         //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
         //we iterate to limit exclusive so that the final retry is the limit, nth retry.
-        for attempts in 1..limit.get() {
+        for attempt in 1..limit.get() {
             let res = fallible().await;
             let Err(error) = res else {
                 return res;
@@ -65,18 +64,18 @@ pub trait BackoffHandler: Send {
             if is_recoverable(&error) == false {
                 return Err(log_and_return(BackoffError::new(
                     error,
-                    BackoffErrorKind::Unrecoverable(attempts),
+                    BackoffErrorKind::Unrecoverable(attempt),
                 )));
             };
 
-            let interval = randomizer.randomize(strategy.interval(attempts));
+            let randomized = randomizer.randomize(strategy.interval(attempt));
 
-            match peek_retry(&error, interval) {
+            match peek_retry(&error, randomized, attempt) {
                 Some(i) => sleep(i).await,
                 None => {
                     return Err(log_and_return(BackoffError::new(
                         error,
-                        BackoffErrorKind::ExplicitlyTerminated(attempts),
+                        BackoffErrorKind::ExplicitlyTerminated(attempt),
                     )));
                 }
             }

@@ -1,38 +1,15 @@
 use std::{future::Future, num::NonZeroU32, time::Duration};
 
-use crate::{BackoffError, BackoffErrorKind};
-
-pub trait BackoffStrategy {
-    fn interval(&self, attempts: u32) -> Duration;
-
-    fn limit(&self) -> NonZeroU32;
-}
-
-///Provides the interface by which BackoffHandlers can add randmoness to their retries.
-///Randomization is useful to prevent multiple requests to an endpoint which fail concurrently
-///from retrying the endpoint concurrently, which may exacerbate the problem or even trigger DoS protections.
-pub trait Randomizer {
-    ///Given an interval, applies a function to randomize
-    ///TODO: do some RNGs need a mutable reference to self?
-    fn randomize(&mut self, interval: Duration) -> Duration;
-}
-
-///A Randomizer that doesn't actually do anything.
-///This can save cycles and memory if randomization is deemed unnecessary by the developer.
-pub struct NotRandom {}
-
-impl Randomizer for NotRandom {
-    fn randomize(&mut self, interval: Duration) -> Duration {
-        interval
-    }
-}
+use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, BackoffErrorKind};
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
 #[allow(async_fn_in_trait)]
-pub trait BackoffHandler: BackoffStrategy + Send {
-    ///Allows the implementor to "hook" into the retry loop and log the final retuned error automatically.
-    ///If this behavior is not desired leave the function body empty to return immediately.
-    fn log<E>(e: &BackoffError<E>);
+pub trait BackoffHandler: Send {
+    //since it's meant to be overrided and the default is to do nothing we really should be unused.
+    #[allow(unused)]
+    ///Allows the implementor to "hook" into the retry loop and log the final returned error internal to a BackoffHandler.
+    ///default implementation is a no-op. Feel free to override this as necessary.
+    fn log<E>(e: &BackoffError<E>) {}
 
     ///Runs a function and attempts retries based on its type as well as the type parameters provided:
     ///
@@ -41,7 +18,7 @@ pub trait BackoffHandler: BackoffStrategy + Send {
     ///- is_recoverable: determines whether the error returned by Fallible (if any) is able to be recovered: for example,
     ///  HTTP 503 (Service Unavailable) may resolve itself by being retried, while an HTTP 404 (Not Found) is highly unlikely to be so.
     ///  in the former case `true` should be returned and in the latter, `false`.
-    ///- peek_retry: Allows the BackoffHandler to decide whether to to terminate early based on the Error *or* the next retry interval planned by the Handler.
+    ///- peek_retry: Allows the BackoffHandler to decide whether to to terminate early based on fallible's Error value *or* the next retry interval planned by the Handler.
     ///  this can be useful i.e. when receiving an HTTP 429 (Retry Later), and overriding the planned_duration, or terminating early if planned_duration is too long.
     ///  When this returns Some(_), the returned duration will be used as the interval between retries.
     ///  When it returns None the Handler will terminate all retries immediately and return a BackoffError::EarlyTermination error.
@@ -50,23 +27,20 @@ pub trait BackoffHandler: BackoffStrategy + Send {
     ///# Generic Parameters
     ///- `T`: The success value of `fallible`.
     ///- `E`: The error value of `fallible`.
-    ///- `Fal`: The generic type of `fallible` itself.
-    ///- `Fut`: The `Future` returned by `fallible`.
-    ///- `R`: The Randomizer which will be applied to retry intervals.
+    ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
     ///Note: parameters T, E, Fal, Fut, and S, are very likely to be inferred by the compiler. However, R might not.
-    async fn handle<T, E, Fal, Fut, R, S>(
+    async fn handle<T, E, F, S>(
         &self,
-        mut fallible: Fal,
+        mut fallible: impl FnMut() -> F,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration) -> Option<Duration>,
-        randomizer: &mut R,
+        randomizer: &mut impl Randomizer,
+        strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
     ) -> Result<T, E>
     where
-        Fal: FnMut() -> Fut,
-        Fut: Future<Output = Result<T, E>>,
-        R: Randomizer,
+        F: Future<Output = Result<T, E>>,
         S: Future<Output = ()>,
     {
         let log_and_return = |e: BackoffError<E>| -> E {
@@ -74,7 +48,7 @@ pub trait BackoffHandler: BackoffStrategy + Send {
             e.error
         };
 
-        let limit = self.limit();
+        let limit = strategy.limit();
         //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
         //we iterate to limit exclusive so that the final retry is the limit, nth retry.
         for attempts in 1..limit.get() {
@@ -90,7 +64,7 @@ pub trait BackoffHandler: BackoffStrategy + Send {
                 }));
             };
 
-            let interval = randomizer.randomize(self.interval(attempts));
+            let interval = randomizer.randomize(strategy.interval(attempts));
 
             match peek_retry(&error, interval) {
                 Some(i) => sleep(i).await,
@@ -119,8 +93,3 @@ pub trait BackoffHandler: BackoffStrategy + Send {
             .map_err(|e| log_and_return(e))
     }
 }
-
-///TODO: finish blanket impl. Shoudl log be refactored into seperate trait that is a supertrait of BackoffStrategy?
-///the trait bound of it in BackoffHandler means the blanket impl cannot be done while it is part of Log withot  a default impl which is easily ignored and any one that makes sense is going to be surprising.
-///TODO: SHould BackoffStrategy be folded into Handler?
-impl BackoffHandler for S {}

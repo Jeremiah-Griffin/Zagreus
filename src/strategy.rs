@@ -1,11 +1,14 @@
 use std::{num::NonZeroU32, time::Duration};
 
-use crate::handler::BackoffStrategy;
+pub trait BackoffStrategy: Send {
+    fn interval(&self, attempts: u32) -> Duration;
 
+    fn limit(&self) -> NonZeroU32;
+}
 ///Retry strategy with backoffs that grow with n * i where n is the interval, and i is the number of requests.
 pub struct Linear {
     ///The constant factor of the backoff. The first backoff interval will be this long.
-    ///All successive intervals will be this value multiplied by the number of intervals.
+    ///All successive intervals will be this value multiplied by the number of attempts.
     constant: Duration,
     ///The maximum number of retries that may be attempted.
     limit: NonZeroU32,

@@ -2,6 +2,9 @@ use std::{error::Error, num::NonZeroU32, time::Duration};
 
 use crate::{BackoffError, BackoffLogger, BackoffStrategy, Randomizer};
 
+///
+pub struct NoLogging {}
+
 ///a logger that prints to StdErr.
 pub struct StdErr {}
 
@@ -34,15 +37,15 @@ impl<E: Error> BackoffLogger<E> for StdOut {
 
 ///A Randomizer that does nothing.
 ///This can save cycles and memory if randomization is deemed unnecessary by the developer.
-pub struct NotRandom {}
+pub struct NoRandomization {}
 
-impl NotRandom {
+impl NoRandomization {
     pub fn new() -> Self {
-        NotRandom {}
+        NoRandomization {}
     }
 }
 
-impl Randomizer for NotRandom {
+impl Randomizer for NoRandomization {
     ///NotRandom always returns the interval it is given, doing nothing.
     fn randomize(&mut self, interval: Duration) -> Duration {
         interval

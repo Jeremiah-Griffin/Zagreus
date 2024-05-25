@@ -1,5 +1,5 @@
 use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, BackoffErrorKind};
-use std::{future::Future, time::Duration};
+use std::{error::Error, future::Future, time::Duration};
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
 pub trait BackoffHandler: Send {
@@ -7,7 +7,7 @@ pub trait BackoffHandler: Send {
     #[allow(unused)]
     ///Allows the implementor to "hook" into the retry loop and log the final returned error internal to a BackoffHandler.
     ///default implementation is a no-op. Feel free to override this as necessary.
-    fn log<E>(e: &BackoffError<E>) {}
+    fn log<E: Error>(e: &BackoffError<E>) {}
 
     fn randomizer(&mut self) -> &mut impl Randomizer;
 
@@ -30,7 +30,7 @@ pub trait BackoffHandler: Send {
     ///- `E`: The error value of `fallible`.
     ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
-    fn handle<T: Send, E: Send, F, S>(
+    fn handle<T: Send, E: Send + Error, F, S>(
         &mut self,
         //Make sure that ONLY fallible is accepted as a closure:
         //When nightly_auto_trait is implemented it limits the number of structural checks for the implementors of CanBackoff

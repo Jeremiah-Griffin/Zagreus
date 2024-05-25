@@ -7,14 +7,3 @@ pub trait Randomizer {
     ///Given an interval, applies a function to randomize it, returning the randomized interval.
     fn randomize(&mut self, interval: Duration) -> Duration;
 }
-
-///A Randomizer that doesn't actually do anything.
-///This can save cycles and memory if randomization is deemed unnecessary by the developer.
-pub struct NotRandom {}
-
-impl Randomizer for NotRandom {
-    ///NotRandom always returns the interval it is given, doing nothing.
-    fn randomize(&mut self, interval: Duration) -> Duration {
-        interval
-    }
-}

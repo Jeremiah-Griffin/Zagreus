@@ -2,13 +2,14 @@ use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, Backoff
 use std::{future::Future, time::Duration};
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
-#[allow(async_fn_in_trait)]
 pub trait BackoffHandler: Send {
     //since it's meant to be overrided and the default is to do nothing we really should be unused.
     #[allow(unused)]
     ///Allows the implementor to "hook" into the retry loop and log the final returned error internal to a BackoffHandler.
     ///default implementation is a no-op. Feel free to override this as necessary.
     fn log<E>(e: &BackoffError<E>) {}
+
+    fn randomizer(&mut self) -> &mut impl Randomizer;
 
     ///Runs a function and attempts retries based on its type as well as the type parameters provided:
     ///
@@ -29,71 +30,72 @@ pub trait BackoffHandler: Send {
     ///- `E`: The error value of `fallible`.
     ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
-    async fn handle<T, E, F, S>(
-        &self,
+    fn handle<T: Send, E: Send, F, S>(
+        &mut self,
         //Make sure that ONLY fallible is accepted as a closure:
         //When nightly_auto_trait is implemented it limits the number of structural checks for the implementors of CanBackoff
         //this means that if any of the other callbacks take a BackoffHandler a nested call could occur, but that is an unlikely
         //usecase for any of those methods, while allowing paterns that dont lend themselves to auto trait implementation checking (like dyn trait) to be used
         //in those callbacks, if necessary
-        mut fallible: impl FnMut() -> F,
+        mut fallible: impl FnMut() -> F + Send,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration, attempt: u32) -> Option<Duration>,
-        randomizer: &mut impl Randomizer,
         strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
-    ) -> Result<T, E>
+    ) -> impl Future<Output = Result<T, E>> + Send
     where
-        F: Future<Output = Result<T, E>>,
-        S: Future<Output = ()>,
+        F: Future<Output = Result<T, E>> + Send,
+        S: Future<Output = ()> + Send,
     {
-        let limit = strategy.limit();
+        async move {
+            let limit = strategy.limit();
 
-        let log_and_return = |e: E, kind: BackoffErrorKind| -> E {
-            let backoff_error = BackoffError::new(e, kind);
-            Self::log(&backoff_error);
-            backoff_error.into_error()
-        };
-        //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
-        //we iterate to limit exclusive so that the final retry is the limit, nth retry.
-        for attempt in 1..limit.get() {
-            let res = fallible().await;
-            let Err(error) = res else {
-                return res;
+            let log_and_return = |e: E, kind: BackoffErrorKind| -> E {
+                let backoff_error = BackoffError::new(e, kind);
+                Self::log(&backoff_error);
+                backoff_error.into_error()
             };
+            //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
+            //we iterate to limit exclusive so that the final retry is the limit, nth retry.
+            for attempt in 1..limit.get() {
+                let res = fallible().await;
+                let Err(error) = res else {
+                    return res;
+                };
 
-            //if an error is not recoverable we terminate iteration
-            if is_recoverable(&error) == false {
-                return Err(log_and_return(
-                    error,
-                    BackoffErrorKind::Unrecoverable(attempt),
-                ));
-            };
-
-            //interval can terminate iteration
-            let Some(interval) = strategy.interval(attempt) else {
-                return Err(log_and_return(
-                    error,
-                    BackoffErrorKind::IntervalTerminated(attempt),
-                ));
-            };
-
-            //peek_retry can terminate iteration.
-            match peek_retry(&error, randomizer.randomize(interval), attempt) {
-                Some(i) => sleep(i).await,
-                None => {
+                //if an error is not recoverable we terminate iteration
+                if is_recoverable(&error) == false {
                     return Err(log_and_return(
                         error,
-                        BackoffErrorKind::PeekTerminated(attempt),
+                        BackoffErrorKind::Unrecoverable(attempt),
                     ));
+                };
+
+                //interval can terminate iteration
+                let Some(interval) = strategy.interval(attempt) else {
+                    return Err(log_and_return(
+                        error,
+                        BackoffErrorKind::IntervalTerminated(attempt),
+                    ));
+                };
+
+                //peek_retry can terminate iteration.
+                match peek_retry(&error, self.randomizer().randomize(interval), attempt) {
+                    Some(i) => sleep(i).await,
+                    None => {
+                        return Err(log_and_return(
+                            error,
+                            BackoffErrorKind::PeekTerminated(attempt),
+                        ));
+                    }
                 }
             }
-        }
 
-        //We don't bother to call peek_retry with this iteration as the prior iteration wil have already done so.
-        fallible().await.map_err(|e| match is_recoverable(&e) {
-            true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit)),
-            false => log_and_return(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit)),
-        })
+            //We don't bother to call peek_retry with this iteration as the prior iteration wil have already done so.
+            fallible().await.map_err(|e| match is_recoverable(&e) {
+                true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit)),
+                false => log_and_return(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit)),
+            })
+        }
     }
 }

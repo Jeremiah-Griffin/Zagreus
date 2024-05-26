@@ -5,6 +5,8 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+///TODO: Document this entire api.
+
 //take cell implements new<T>() -> TakeCellState<T, UnOccupied>;
 ///takecell: TakeCell<T, TakeCellState::Occupied> exposes  a method: take.
 //takecell: TakeCell<T, TakeCellState::UnOccupied> exposes a method: set.
@@ -22,34 +24,48 @@ use std::{
 ///    loan gets dropped and runds its implementation of drop (maybe pushes its error type to the lender? The lender stores it? or can throw it away)
 ///  }
 ///  lender.finalize(loan)
-
-///finlize runs the code which sends the error to the logger. Maybe this is printing to eprintln? if so, a ManyLogger
-///would flush all the errors stored. a FinalError would print onyl the loan pased in.
-///}
 use crate::BackoffError;
 
-trait Logger {
-    fn log<E>(error: BackoffError<E>) {}
+///A `Logger` is passed into the Handle method. The `log()` trait method deterines
+///what the `Logger` will do with the error, such as sending it to stdout or writing it to disk.
+trait Logger<E: Error, L: Lender<E>> {
+    fn log(&self, error: &BackoffError<E>);
+
+    fn lender() -> L {
+        L::new()
+    }
 }
 
-struct FinalErrorLender<E: Error, L: Logger> {
-    phantom: PhantomData<(E, L)>,
+#[allow(drop_bounds)]
+///We use the `Drop` bound to implement behavior at the end of each retry loop iteration.
+///For example, if we want every error emitted within the loop to get pushed to a buffer, the `Loan` should keep a mutable reference
+///to that buffer and and push its error to it. On the call to finalize - since we need to call log *before* the Loan gets dropped, we take a reference
+///to the contained BackoffError<E>
+trait ErrorLoan<E: Error>: Drop {
+    fn new(error: BackoffError<E>) -> Self;
+
+    fn error(&self) -> &BackoffError<E>;
 }
 
-trait Lender<E: Error> {
-    type Loan;
+struct FinalErrorLender<E: Error> {
+    phantom: PhantomData<E>,
+}
 
+///A `Lender` describes when a `Logger`'s `log` method gets invoked.
+///Every `BackoffError` emitted internally to the retry loop will ge converted into a `Loan` implementing `ErrorLoan`.
+//
+trait Lender<E: Error>: Sized {
+    type Loan: ErrorLoan<E>;
     fn new() -> Self;
 
     ///Creates the loan type.
     fn lend(&mut self, error: BackoffError<E>) -> Self::Loan;
 
-    fn finalize() {}
+    fn finalize(self, loan: Self::Loan, logger: &impl Logger<E, Self>);
 }
 
-impl<E: Error, L: Logger> Lender<E> for FinalErrorLender<E, L> {
+impl<E: Error> Lender<E> for FinalErrorLender<E> {
     type Loan = FinalErrorLoan<E>;
-
     fn new() -> Self {
         //the lack of fields should make this a no op.
         FinalErrorLender {
@@ -57,8 +73,12 @@ impl<E: Error, L: Logger> Lender<E> for FinalErrorLender<E, L> {
         }
     }
 
-    fn lend(&mut self, error: BackoffError<E>) -> Self::Loan {
+    fn lend(&mut self, error: BackoffError<E>) -> FinalErrorLoan<E> {
         FinalErrorLoan { error }
+    }
+
+    fn finalize(self, loan: FinalErrorLoan<E>, logger: &impl Logger<E, Self>) {
+        logger.log(loan.error());
     }
 }
 
@@ -66,17 +86,47 @@ struct FinalErrorLoan<E: Error> {
     error: BackoffError<E>,
 }
 
-impl<E: Error> FinalErrorLoan<E> {
-    pub fn new(error: BackoffError<E>) -> Self {
+impl<E: Error> ErrorLoan<E> for FinalErrorLoan<E> {
+    fn new(error: BackoffError<E>) -> Self {
         FinalErrorLoan { error }
     }
 
-    pub fn error(&self) -> &BackoffError<E> {
+    fn error(&self) -> &BackoffError<E> {
         &self.error
     }
+}
 
-    pub fn into_error(self) -> BackoffError<E> {
-        self.error
+impl<E: Error> Drop for FinalErrorLoan<E> {
+    fn drop(&mut self) {
+        ()
+    }
+}
+
+/*
+impl<'a, E: Error> Lender<E> for AllErrorsLender<E>
+where
+    E: 'a,
+{
+    type Loan = AllErrorsLoan<'a, E>;
+    fn new() -> Self {
+        todo!()
+    }
+
+    fn lend(&'a mut self, error: BackoffError<E>) -> AllErrorsLoan<'a, E> {
+        AllErrorsLoan {
+            error: Some(error),
+            lender: self,
+        }
+    }
+
+    fn finalize(self, loan: AllErrorsLoan<'a, E>, logger: &impl Logger<E, Self>) {
+        logger.log(loan.error());
+
+        let Some(errors) = self.errors else {
+            return;
+        };
+
+        errors.into_iter().for_each(|e| logger.log(&e));
     }
 }
 
@@ -84,59 +134,32 @@ struct AllErrorsLender<E: Error> {
     errors: Option<Vec<BackoffError<E>>>,
 }
 
-impl<E: Error> AllErrorsLender<E> {
-    pub fn new() -> Self {
-        //the lack of fields should make this a no op.
-        AllErrorsLender { errors: None }
-    }
-
-    pub fn lend<'a>(&'a mut self, error: BackoffError<E>) -> AllErrorsLoan<'a, E> {
-        AllErrorsLoan {
-            error: Some(error),
-            logger: self,
-        }
-    }
-}
-
 struct AllErrorsLoan<'a, E: Error> {
     error: Option<BackoffError<E>>,
-    logger: &'a mut AllErrorsLender<E>,
+    lender: &'a mut AllErrorsLender<E>,
 }
 
-impl<'a, E: Error> AllErrorsLoan<'a, E> {
-    pub fn new(error: BackoffError<E>, logger: &'a mut AllErrorsLender<E>) -> Self {
-        AllErrorsLoan {
-            error: Some(error),
-            logger,
-        }
+impl<'a, E: Error> ErrorLoan<E> for AllErrorsLoan<'a, E> {
+    fn new(error: BackoffError<E>) -> Self {
+        todo!()
+    }
+
+    fn error(&self) -> &BackoffError<E> {
+        todo!()
+    }
+
+    fn into_error(self) -> BackoffError<E> {
+        todo!()
     }
 }
 
 impl<'a, E: Error> Drop for AllErrorsLoan<'a, E> {
     fn drop(&mut self) {
-        if self.logger.errors.is_none() {
-            self.logger.errors = Some(Vec::new());
+        if self.lender.errors.is_none() {
+            self.lender.errors = Some(Vec::new());
         }
 
-        let errors = self.logger.errors.as_mut().unwrap();
+        let errors = self.lender.errors.as_mut().unwrap();
         errors.push(self.error.take().unwrap())
     }
-}
-
-///TODO figure out a trait solution that will log an error only once,
-///and one will log all errors accumulated ina  store. Both will implement a method to collect
-///types, and both will impl a method to present types (either as a slice of BackoffError<E> or a single BackoffError<E>)
-///
-///depending on those traits - as parameter of the logger - the implementation of drop will call log. In the case of the single error, only one E will be stored and tht one (the latest) will get logge.
-///in the other one,  it will call log on each error in the slice.
-pub trait BackoffLogger<E: Error> {
-    fn log(error: BackoffError<E>);
-}
-
-struct BackoffErrorLogger<E: Error> {
-    error: E,
-}
-
-impl<E: Error> Drop for BackoffErrorLogger<E> {
-    fn drop(&mut self) {}
-}
+}*/

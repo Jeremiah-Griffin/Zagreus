@@ -1,6 +1,6 @@
 use std::{error::Error, num::NonZeroU32, time::Duration};
 
-use crate::{BackoffError, BackoffLogger, BackoffStrategy, Randomizer};
+use crate::{BackoffError, BackoffStrategy, Randomizer};
 
 ///
 pub struct NoLogging {}
@@ -14,24 +14,12 @@ impl StdErr {
     }
 }
 
-impl<E: Error> BackoffLogger<E> for StdErr {
-    fn log(error: BackoffError<E>) {
-        eprintln!("{error}")
-    }
-}
-
 ///a logger that prints to StdOut.
 pub struct StdOut {}
 
 impl StdOut {
     pub fn new() -> Self {
         StdOut {}
-    }
-}
-
-impl<E: Error> BackoffLogger<E> for StdOut {
-    fn log(error: BackoffError<E>) {
-        println!("{error}")
     }
 }
 

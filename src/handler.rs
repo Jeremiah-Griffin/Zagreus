@@ -9,6 +9,8 @@ pub trait BackoffHandler: Send {
     ///default implementation is a no-op. Feel free to override this as necessary.
     fn log<E: Error>(e: &BackoffError<E>) {}
 
+    ///At scale randomziation can be somewhat expensive. It is therefore encouraged that an RNG be stored inside the implementor
+    ///and a reference to it returned by this method.
     fn randomizer(&mut self) -> &mut impl Randomizer;
 
     ///Runs a function and attempts retries based on its type as well as the type parameters provided:

@@ -42,9 +42,9 @@ pub trait BackoffHandler: Send {
         mut fallible: impl FnMut() -> F + Send,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration, attempt: u32) -> Option<Duration>,
-        strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
-        logger: &mut impl BackoffLogger<E>,
+        strategy: impl BackoffStrategy,
+        logger: impl BackoffLogger<E>,
     ) -> impl Future<Output = Result<T, E>> + Send
     where
         F: Future<Output = Result<T, E>> + Send,
@@ -53,7 +53,7 @@ pub trait BackoffHandler: Send {
         fn log_and_return<Err: Error>(
             error: Err,
             kind: BackoffErrorKind,
-            logger: &mut impl BackoffLogger<Err>,
+            logger: &impl BackoffLogger<Err>,
         ) -> Err {
             let backoff_error = BackoffError::new(error, kind);
             logger.log_terminal(&backoff_error);
@@ -75,7 +75,7 @@ pub trait BackoffHandler: Send {
                     return Err(log_and_return(
                         error,
                         BackoffErrorKind::Unrecoverable(attempt),
-                        logger,
+                        &logger,
                     ));
                 };
 
@@ -84,7 +84,7 @@ pub trait BackoffHandler: Send {
                     return Err(log_and_return(
                         error,
                         BackoffErrorKind::IntervalTerminated(attempt),
-                        logger,
+                        &logger,
                     ));
                 };
 
@@ -98,7 +98,7 @@ pub trait BackoffHandler: Send {
                         return Err(log_and_return(
                             error,
                             BackoffErrorKind::PeekTerminated(attempt),
-                            logger,
+                            &logger,
                         ));
                     }
                 }
@@ -106,11 +106,11 @@ pub trait BackoffHandler: Send {
 
             //We don't bother to call peek_retry with this iteration as the prior iteration wil have already done so.
             fallible().await.map_err(|e| match is_recoverable(&e) {
-                true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit), logger),
+                true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit), &logger),
                 false => log_and_return(
                     e,
                     BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit),
-                    logger,
+                    &logger,
                 ),
             })
         }

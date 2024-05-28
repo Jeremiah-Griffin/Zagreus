@@ -1,8 +1,8 @@
+use crate::strategy::BackoffStrategy;
 use std::{num::NonZeroU32, time::Duration};
 
-use crate::strategy::BackoffStrategy;
-
 ///Retry strategy with backoffs that grow with n * i where n is the interval, and i is the number of requests.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Linear {
     ///The constant factor of the backoff. The first backoff interval will be this long.
     ///All successive intervals will be this value multiplied by the number of attempts.
@@ -16,6 +16,7 @@ impl Linear {
         Linear { constant, limit }
     }
 }
+
 impl BackoffStrategy for Linear {
     fn interval(&self, attempts: u32) -> Option<Duration> {
         Some(self.constant.mul_f64(attempts as f64))
@@ -26,6 +27,7 @@ impl BackoffStrategy for Linear {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 ///Retry strategy with backoffs that do not grow with time.
 pub struct Constant {
     ///The fixed amount by which the backoffs will be spaced
@@ -50,6 +52,7 @@ impl Constant {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 ///Classic expontential backoff.
 pub struct Exponential {
     ///The first backoff will take this long. Further backoffs

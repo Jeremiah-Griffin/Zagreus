@@ -19,8 +19,6 @@ There are four traits with which users of this crate must familiarize themselves
 `BackoffHandler`: Generates (and sleeps for) the amount of time produced by the BackoffStrategy as randomized by the Randomizer.
 `BackoffLogger`: Exposes methods for logging errors encountered both within and at the end of the attempt loop.
 
-# TODO: add notes about BackoffLogger
-
 Start by creating a BackoffStrategy. This is very simple and involves only defining a `limit()` to the number of attempts iterations
 and an `interval()` method to calculate the time between said iterations.
 
@@ -35,7 +33,7 @@ has the parameters for `handle()` predefined and stored within itself for each g
 
 # FAQ:
 
-Q: How do I cap the amount of time that can be used by retries?
+Q: How may the interval between retries be capped?
 
 A: Return `None` from `BackoffStrategy::interval()`.
 There are too many distinct ways to track time than would be sound for this crate to opine upon. Instead, implementors of BackoffStrategy

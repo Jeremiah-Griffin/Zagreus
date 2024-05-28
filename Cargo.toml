@@ -8,7 +8,7 @@ categories = ["web-programming","network-programming",]
 keywords = ["backoff", "retry", "exponential"]
 
 [dev-dependencies]
-tokio = {version = "1.37.0", features = ["rt", "macros"]}
+#tokio = {version = "1.37.0", features = ["rt", "macros"]}
 
 [features]
 #This feature is highly risky for library crates.

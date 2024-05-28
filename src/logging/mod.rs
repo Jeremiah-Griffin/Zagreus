@@ -5,7 +5,7 @@ mod test;
 mod loans;
 pub mod strategies;
 
-use crate::BackoffError;
+use crate::errors::BackoffError;
 
 //as long as the lending mechanism is ill-documented/reliant on Drop.
 //TODO: to remove the Drop bound, we can create a lona wrapper type which calls the ErrorLoan's implementation some function (on_drop?) in its drop impl.

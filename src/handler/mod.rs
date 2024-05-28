@@ -1,4 +1,8 @@
-use crate::{random::Randomizer, strategy::BackoffStrategy, BackoffError, BackoffErrorKind};
+use crate::{
+    errors::{BackoffError, BackoffErrorKind},
+    random::Randomizer,
+    strategy::BackoffStrategy,
+};
 use std::{error::Error, future::Future, time::Duration};
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.

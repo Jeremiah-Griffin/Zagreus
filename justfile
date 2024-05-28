@@ -4,4 +4,4 @@ default:
 
 alias t := test
 test:
-	cargo t -- --all-features
+	cargo t --all-features

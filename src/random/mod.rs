@@ -2,7 +2,7 @@ use std::time::Duration;
 pub mod randomizers {
     use std::time::Duration;
 
-    use crate::Randomizer;
+    use crate::random::Randomizer;
 
     ///A Randomizer that does nothing.
     ///This can save cycles and memory if randomization is deemed unnecessary by the developer.

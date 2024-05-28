@@ -1,6 +1,6 @@
 use std::{error::Error, marker::PhantomData};
 
-use crate::BackoffError;
+use crate::errors::BackoffError;
 
 use super::{strategies::AllErrorsStrategy, ErrorLoan};
 

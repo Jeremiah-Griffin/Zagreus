@@ -1,6 +1,6 @@
 use std::{num::NonZeroU32, time::Duration};
 
-use crate::BackoffStrategy;
+use crate::strategy::BackoffStrategy;
 
 ///Retry strategy with backoffs that grow with n * i where n is the interval, and i is the number of requests.
 pub struct Linear {

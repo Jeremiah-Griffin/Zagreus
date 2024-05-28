@@ -1,6 +1,5 @@
 use crate::{
     errors::{BackoffError, BackoffErrorKind},
-    logging::{BackoffLogger, LoggingStrategy},
     random::Randomizer,
     strategy::BackoffStrategy,
 };
@@ -12,7 +11,7 @@ pub trait BackoffHandler: Send {
     #[allow(unused)]
     ///Allows the implementor to "hook" into the retry loop and log the final returned error internal to a BackoffHandler.
     ///default implementation is a no-op. Feel free to override this as necessary.
-    fn log<E: Error + Send>(e: &BackoffError<E>) {}
+    fn log<E: Error>(e: &BackoffError<E>) {}
 
     ///At scale randomziation can be somewhat expensive. It is therefore encouraged that an RNG be stored inside the implementor
     ///and a reference to it returned by this method.
@@ -37,7 +36,7 @@ pub trait BackoffHandler: Send {
     ///- `E`: The error value of `fallible`.
     ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
-    fn handle<'a, T: Send, E: Send + Error, F, L: BackoffLogger<'a, E>, S>(
+    fn handle<T: Send, E: Send + Error, F, S>(
         &mut self,
         //Make sure that ONLY fallible is accepted as a closure:
         //When nightly_auto_trait is implemented it limits the number of structural checks for the implementors of CanBackoff
@@ -47,21 +46,18 @@ pub trait BackoffHandler: Send {
         mut fallible: impl FnMut() -> F + Send,
         is_recoverable: fn(error: &E) -> bool,
         peek_retry: fn(error: &E, planned_interval: Duration, attempt: u32) -> Option<Duration>,
-        backoff_strategy: impl BackoffStrategy,
+        strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
-        logger: &'a L,
     ) -> impl Future<Output = Result<T, E>> + Send
     where
         F: Future<Output = Result<T, E>> + Send,
         S: Future<Output = ()> + Send,
     {
         async move {
-            let mut logging_strategy = L::Strategy::new();
-            let limit = backoff_strategy.limit();
+            let limit = strategy.limit();
 
             let log_and_return = |e: E, kind: BackoffErrorKind| -> E {
                 let backoff_error = BackoffError::new(e, kind);
-
                 Self::log(&backoff_error);
                 backoff_error.into_error()
             };
@@ -73,11 +69,6 @@ pub trait BackoffHandler: Send {
                     return res;
                 };
 
-                let loan = match fallible().await {
-                    Ok(r) => return Ok(r),
-                    Err(e) => logging_strategy.lend(e),
-                };
-
                 //if an error is not recoverable we terminate iteration
                 if is_recoverable(&error) == false {
                     return Err(log_and_return(
@@ -87,7 +78,7 @@ pub trait BackoffHandler: Send {
                 };
 
                 //interval can terminate iteration
-                let Some(interval) = backoff_strategy.interval(attempt) else {
+                let Some(interval) = strategy.interval(attempt) else {
                     return Err(log_and_return(
                         error,
                         BackoffErrorKind::IntervalTerminated(attempt),

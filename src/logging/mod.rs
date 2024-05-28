@@ -1,9 +1,5 @@
-use std::error::Error;
-
-mod test;
-
 use crate::errors::BackoffError;
-
+use std::error::Error;
 ///Types implementing `BackoffLogger`
 pub mod loggers;
 

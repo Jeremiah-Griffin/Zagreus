@@ -15,7 +15,7 @@ impl Default for NoRandomization {
 
 impl Randomizer for NoRandomization {
     ///NotRandom always returns the interval it is given, doing nothing.
-    fn randomize(&mut self, interval: Duration) -> Duration {
+    fn randomize(&self, interval: Duration) -> Duration {
         interval
     }
 }

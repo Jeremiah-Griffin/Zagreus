@@ -1,4 +1,5 @@
 use std::{num::NonZeroU32, time::Duration};
+///Types implementing `BackoffStrategy`.
 pub mod strategies;
 
 pub trait BackoffStrategy: Send + Sync {

@@ -1,4 +1,5 @@
 use std::time::Duration;
+///Types implementing `Randomizer`.
 pub mod randomizers;
 
 ///Provides the interface by which BackoffHandlers can add randmoness to their retries.

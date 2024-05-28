@@ -4,24 +4,8 @@ mod test;
 
 use crate::errors::BackoffError;
 
-pub mod loggers {
-    use std::error::Error;
-
-    use crate::{BackoffError, BackoffLogger};
-
-    ///A logger that does nothing and costs nothing.
-    pub struct NoLogging {}
-
-    impl<E: Error> BackoffLogger<E> for NoLogging {
-        fn log_nonterminal(&mut self, _error: &E, _attempt: u32) {
-            ()
-        }
-
-        fn log_terminal(&mut self, _error: &BackoffError<E>) {
-            ()
-        }
-    }
-}
+///Types implementing `BackoffLogger`
+pub mod loggers;
 
 #[allow(private_bounds)]
 pub trait BackoffLogger<E: Error>: Send {

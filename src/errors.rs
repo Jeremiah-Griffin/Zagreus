@@ -46,7 +46,7 @@ pub enum BackoffErrorKind {
     Unrecoverable(u32),
     ///Returned when there are no more retries left.
     ExhaustedLimit(NonZeroU32),
-    ///The final call in a retry loop may return an unrecoverable error, in which case it is both Unrecoverable and ExhaustedLimit.
+    ///The final call in an attempt loop may return an unrecoverable error, in which case it is both `UnrecoverableAndExhaustedLimit`.
     UnrecoverableAndExhaustedLimit(NonZeroU32),
     ///A call to peek_retry returned None, meaning it requested further attempts to be cancelled.
     PeekTerminated(u32),

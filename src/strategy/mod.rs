@@ -1,4 +1,5 @@
 use std::{num::NonZeroU32, time::Duration};
+pub mod strategies;
 
 pub trait BackoffStrategy: Send + Sync {
     ///The interval computed for the attempts + 1 backoff.

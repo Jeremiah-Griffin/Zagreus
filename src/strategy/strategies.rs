@@ -1,44 +1,7 @@
-use std::{error::Error, num::NonZeroU32, time::Duration};
+use std::{num::NonZeroU32, time::Duration};
 
-use crate::{BackoffError, BackoffStrategy, Randomizer};
+use crate::BackoffStrategy;
 
-///
-pub struct NoLogging {}
-
-///a logger that prints to StdErr.
-pub struct StdErr {}
-
-impl StdErr {
-    pub fn new() -> Self {
-        StdErr {}
-    }
-}
-
-///a logger that prints to StdOut.
-pub struct StdOut {}
-
-impl StdOut {
-    pub fn new() -> Self {
-        StdOut {}
-    }
-}
-
-///A Randomizer that does nothing.
-///This can save cycles and memory if randomization is deemed unnecessary by the developer.
-pub struct NoRandomization {}
-
-impl NoRandomization {
-    pub fn new() -> Self {
-        NoRandomization {}
-    }
-}
-
-impl Randomizer for NoRandomization {
-    ///NotRandom always returns the interval it is given, doing nothing.
-    fn randomize(&mut self, interval: Duration) -> Duration {
-        interval
-    }
-}
 ///Retry strategy with backoffs that grow with n * i where n is the interval, and i is the number of requests.
 pub struct Linear {
     ///The constant factor of the backoff. The first backoff interval will be this long.

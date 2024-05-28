@@ -1,12 +1,12 @@
 use std::{error::Error, fmt::Display, num::NonZeroU32};
 
 #[derive(Debug)]
-pub struct BackoffError<E: Error> {
+pub struct BackoffError<E: Error + Send> {
     error: E,
     kind: BackoffErrorKind,
 }
 
-impl<E: Error> BackoffError<E> {
+impl<E: Error + Send> BackoffError<E> {
     pub fn new(error: E, kind: BackoffErrorKind) -> BackoffError<E> {
         BackoffError { error, kind }
     }
@@ -54,7 +54,7 @@ pub enum BackoffErrorKind {
     IntervalTerminated(u32),
 }
 
-impl<E: Error> Display for BackoffError<E> {
+impl<E: Error + Send> Display for BackoffError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             BackoffErrorKind::Unrecoverable(i) => write!(
@@ -84,4 +84,4 @@ impl<E: Error> Display for BackoffError<E> {
         }
     }
 }
-impl<E: Error> Error for BackoffError<E> {}
+impl<E: Error + Send> Error for BackoffError<E> {}

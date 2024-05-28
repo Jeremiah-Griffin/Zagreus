@@ -8,11 +8,11 @@ use super::{
 };
 
 ///A strategy that logs only if all retry attempts fail
-pub struct FinalErrorStrategy<E: Error> {
+pub struct FinalErrorStrategy<E: Error + Send> {
     phantom: PhantomData<E>,
 }
 
-impl<'a, E: Error> LoggingStrategy<'a, E> for FinalErrorStrategy<E> {
+impl<'a, E: Error + Send> LoggingStrategy<'a, E> for FinalErrorStrategy<E> {
     type Loan = FinalErrorLoan<'a, E>;
     fn new() -> Self {
         //the lack of fields should make this a no op.
@@ -33,7 +33,7 @@ impl<'a, E: Error> LoggingStrategy<'a, E> for FinalErrorStrategy<E> {
     }
 }
 
-impl<'a, E: Error> LoggingStrategy<'a, E> for AllErrorsStrategy<'a, E>
+impl<'a, E: Error + Send> LoggingStrategy<'a, E> for AllErrorsStrategy<'a, E>
 where
     E: 'a,
 {
@@ -68,7 +68,7 @@ where
 //
 //TakeCellState::Occupied implments deref and derefmut to &T and &mut T
 ///A strategy that logs all errors encountered in the retry loop.
-pub struct AllErrorsStrategy<'a, E: Error> {
+pub struct AllErrorsStrategy<'a, E: Error + Send> {
     pub(crate) errors: Option<Vec<BackoffError<E>>>,
     phantom: PhantomData<&'a str>,
 }

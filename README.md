@@ -1,15 +1,14 @@
 # Zagreus
 
 Both a reference to the rebirth of minor greek deity and the rogue-ness of the videogame he protaganizes, Zagreus is a featureful library
-for retries, backoffs, and logging in use at [Ceres](www.ceres.us) and in some of my personal projects.
+for retries, backoffs, and logging.
 
 # Features:
 
 - `async`-friendly API
 - Logging
-- Short circuiting on errors that are unrecoverable
+- Short circuiting on unrecoverable errors
 - Interval randomization
-- Error and interval interception 
 
 # Usage:
 

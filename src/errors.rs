@@ -1,6 +1,9 @@
 use std::{error::Error, fmt::Display, num::NonZeroU32};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+///Contains both the error returned by the `fallible` callback of
+///`BackoffHandler::handle`, and a `BackoffErrorKind` which describes the reason
+///for termination of the retry loop.
 pub struct BackoffError<E: Error> {
     error: E,
     kind: BackoffErrorKind,
@@ -37,7 +40,7 @@ impl<E: Error> BackoffError<E> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 ///Describes all the error states that can induce a backoff
 pub enum BackoffErrorKind {
     ///When the discriminator supplied to a given strategy's handler

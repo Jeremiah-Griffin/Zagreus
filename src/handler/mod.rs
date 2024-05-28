@@ -1,19 +1,15 @@
 use crate::{
     errors::{BackoffError, BackoffErrorKind},
+    logging::BackoffLogger,
     random::Randomizer,
     strategy::BackoffStrategy,
 };
 use std::{error::Error, future::Future, time::Duration};
+mod test;
 
 //I dont know if async_fn_in_trait will be a problem or not as we don't care about auto trait bounds Will check to be sure.
 pub trait BackoffHandler: Send {
-    //since it's meant to be overrided and the default is to do nothing we really should be unused.
-    #[allow(unused)]
-    ///Allows the implementor to "hook" into the retry loop and log the final returned error internal to a BackoffHandler.
-    ///default implementation is a no-op. Feel free to override this as necessary.
-    fn log<E: Error>(e: &BackoffError<E>) {}
-
-    ///At scale randomziation can be somewhat expensive. It is therefore encouraged that an RNG be stored inside the implementor
+    ///At scale randomization can be somewhat expensive. It is therefore encouraged that an RNG be stored inside the implementor
     ///and a reference to it returned by this method.
     fn randomizer(&mut self) -> &mut impl Randomizer;
 
@@ -48,19 +44,24 @@ pub trait BackoffHandler: Send {
         peek_retry: fn(error: &E, planned_interval: Duration, attempt: u32) -> Option<Duration>,
         strategy: impl BackoffStrategy,
         sleep: fn(to_sleep: Duration) -> S,
+        logger: &mut impl BackoffLogger<E>,
     ) -> impl Future<Output = Result<T, E>> + Send
     where
         F: Future<Output = Result<T, E>> + Send,
         S: Future<Output = ()> + Send,
     {
+        fn log_and_return<Err: Error>(
+            error: Err,
+            kind: BackoffErrorKind,
+            logger: &mut impl BackoffLogger<Err>,
+        ) -> Err {
+            let backoff_error = BackoffError::new(error, kind);
+            logger.log_terminal(&backoff_error);
+            backoff_error.into_error()
+        }
         async move {
             let limit = strategy.limit();
 
-            let log_and_return = |e: E, kind: BackoffErrorKind| -> E {
-                let backoff_error = BackoffError::new(e, kind);
-                Self::log(&backoff_error);
-                backoff_error.into_error()
-            };
             //index from 1 so that number off attempts is reported acccurately and that attempts passed to inteveral is never 0.
             //we iterate to limit exclusive so that the final retry is the limit, nth retry.
             for attempt in 1..limit.get() {
@@ -74,6 +75,7 @@ pub trait BackoffHandler: Send {
                     return Err(log_and_return(
                         error,
                         BackoffErrorKind::Unrecoverable(attempt),
+                        logger,
                     ));
                 };
 
@@ -82,16 +84,21 @@ pub trait BackoffHandler: Send {
                     return Err(log_and_return(
                         error,
                         BackoffErrorKind::IntervalTerminated(attempt),
+                        logger,
                     ));
                 };
 
                 //peek_retry can terminate iteration.
                 match peek_retry(&error, self.randomizer().randomize(interval), attempt) {
-                    Some(i) => sleep(i).await,
+                    Some(i) => {
+                        logger.log_nonterminal(&error, attempt);
+                        sleep(i).await
+                    }
                     None => {
                         return Err(log_and_return(
                             error,
                             BackoffErrorKind::PeekTerminated(attempt),
+                            logger,
                         ));
                     }
                 }
@@ -99,8 +106,12 @@ pub trait BackoffHandler: Send {
 
             //We don't bother to call peek_retry with this iteration as the prior iteration wil have already done so.
             fallible().await.map_err(|e| match is_recoverable(&e) {
-                true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit)),
-                false => log_and_return(e, BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit)),
+                true => log_and_return(e, BackoffErrorKind::ExhaustedLimit(limit), logger),
+                false => log_and_return(
+                    e,
+                    BackoffErrorKind::UnrecoverableAndExhaustedLimit(limit),
+                    logger,
+                ),
             })
         }
     }

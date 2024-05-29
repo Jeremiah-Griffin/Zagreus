@@ -7,12 +7,13 @@ Please note this library still has some features missing and needs both examples
 
 # Features:
 
-- `async`hronous API
-- Runtime Independent & Zero Dependencies
+- `async` API
+- Dynamic retries (great for HTML retry-after headers!)
+- Runtime independent
 - Logging
 - Short circuiting on unrecoverable errors
 - Interval randomization
-- Zero Dependencies!
+- Zero dependencies!
 
 # Usage:
 
@@ -39,6 +40,11 @@ has the parameters for `handle()` predefined and stored within itself for each g
 
 # FAQ:
 
+Q: Why Zagreus instead of [backoff](https://crates.io/crates/backoff), [backon](https://crates.io/crates/backon) et. al?
+
+A: The existing crates are some combination of unmaintained,dependency heavy, or make inspecting errors or modifying retry intervals on the fly unnecessarily difficult.
+Zagreus is intended to be a much more primitive library to reduce bloat and make implementing complex retry and error handling behavior easier. 
+
 Q: How may the interval between retries be capped?
 
 A: Return `None` from `BackoffStrategy::interval()`.
@@ -59,8 +65,3 @@ Additionally, If `BackoffHandler` and `BackoffStrategy` were one and the same ea
 or part of the the program's global state. Both of these solutions have negative design and performance implications for asynchronous, highly concurrent applications. 
 Splitting these traits in two allows for easy customization of behavior per-endpoint without resorting to sourcing per-endpoint randomness.
 
-Q: Zagreus is so small (~200 LOC) but the API is so big/ugly/unweildy. Why?
-
-A: This library is meant to expose a very broad amount of functionality in a manner that is both lightweight and runtime-independent.
-The onus of wrangling the APIs into something less annoying is on the user. Do not expect consumers of your types to interface with these traits directly, instead, implement types which
-wrap them, encapsulating common functionality and exposing only the subset of what's left.

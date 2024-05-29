@@ -1,3 +1,5 @@
+#[cfg_attr(feature = "nightly_can_backoff", feature(negative_impls))]
+#[cfg_attr(feature = "nightly_can_backoff", feature(auto_traits))]
 pub use errors::BackoffError;
 pub use handler::BackoffHandler;
 pub use logging::loggers;

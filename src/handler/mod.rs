@@ -28,7 +28,7 @@ pub trait BackoffHandler: Send + Sync {
     ///- `E`: The error value of `fallible`.
     ///- `F`: The generic type of `fallible` itself.
     ///- `S`: The `Future` returned by `sleep`.
-    fn handle<T: Send, E: Send + Error, F, S>(
+    fn handle<T: Send, E: Send + Error, Fal, F, S>(
         &self,
         //Make sure that ONLY fallible is accepted as a closure:
         //When nightly_auto_trait is implemented it limits the number of structural checks for the implementors of CanBackoff

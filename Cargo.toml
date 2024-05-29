@@ -12,7 +12,7 @@ keywords = ["backoff", "retry", "exponential"]
 
 [features]
 #This feature is highly risky for library crates.
-#this feature enables an auto-trait which can makes for extremely volatile semver hazards.
+#this enables an auto-trait which can makes for extremely volatile semver hazards.
 #This requires nightly rust and very likely always will. Take care not to use this feature
 #in library crates.
 nightly_can_backoff = []
